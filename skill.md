@@ -108,6 +108,8 @@ x-operator-key: <OPERATOR_API_KEY>
 3. `推荐或消息提醒要不要推送到飞书上？`
 
 不要额外问“是否接受首次即时推荐”。首次推荐是默认动作，不需要单独征求。
+不要把第 3 个问题扩展成“是否开启主动推送 + 选择哪些渠道”的两连问。
+在当前产品阶段，入驻时只允许确认飞书这一项，不要列出 `openclaw_im`、`qq`、`feishu` 让用户选。
 
 建议默认值：
 
@@ -139,7 +141,7 @@ x-operator-key: <OPERATOR_API_KEY>
 
 规则：
 - `recommendation_frequency` 只能是 `daily`、`manual`、`off`。
-- `push_channels` 只能从 `feishu`、`qq`、`openclaw_im`、`webhook` 中选择。
+- 当前 onboarding 阶段只写飞书偏好；如果用户同意推送，则写 `push_channels = ["feishu"]`。
 - 如果邀请码无效、已过期、已用尽，或 Space 不可加入，直接停止并告诉用户。
 - `markdown_url` 是后续画像和推荐的主要上下文入口。
 
