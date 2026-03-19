@@ -368,9 +368,10 @@ Content-Type: application/json
 
 以下值当前可直接用于联调：
 
-- `space_id`: `8899c0fa-fe10-474c-90ae-90a8491d3ff7`
+- `space_id`: `ee432476-c04d-4566-9b20-aa2f634aa578`
 - `invite_code`: `DEV2026`
 - Alice 的示例 Markdown token：
   `seed-devconf-alice-token`
 
-当前 `api_base` 是临时 Quick Tunnel 地址。如果隧道重启，需要同步更新 front matter 里的 `homepage` 和 `api_base`。
+当前 `api_base` 已切换到正式线上地址：
+- `https://tau-red.vercel.app`
