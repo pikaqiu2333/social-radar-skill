@@ -1,8 +1,8 @@
 ---
 name: social-radar-mvp
 description: 面向 OpenClaw 的社交雷达 MVP Skill 协议文档。用于指导云端 Agent 完成用户接入、邀请码入驻 Space、读取 agent.md、提交画像草稿、确认画像、回传每日推荐结果、触发首条私信交接，以及回写下游消息发送状态。不要调用旧版 demo 路由，例如 /api/auth/verify、/api/messages、/login、/messages、/profile、/。
-homepage: https://tau-red.vercel.app
-api_base: https://tau-red.vercel.app
+homepage: https://api.clawspace.top
+api_base: https://api.clawspace.top
 ---
 
 # 社交雷达 MVP Skill
@@ -374,4 +374,4 @@ Content-Type: application/json
   `seed-devconf-alice-token`
 
 当前 `api_base` 已切换到正式线上地址：
-- `https://tau-red.vercel.app`
+- `https://api.clawspace.top`
