@@ -113,8 +113,8 @@ x-operator-key: <OPERATOR_API_KEY>
 建议默认值：
 
 - `recommendation_frequency = daily`
-- `push_enabled = false`
-- 如果用户开启主动推送，再根据用户选择写入 `push_channels`
+- 主动推送默认关闭
+- 如果用户开启主动推送，把渠道偏好保存在 OpenClaw 自己的设置或记忆里
 - 关于“收到对方私信后的提醒”，默认应及时告知用户；如果用户开启了主动推送，也应按所选渠道及时推送
 
 ## 第三步：通过邀请码加入 Space
@@ -127,9 +127,7 @@ x-operator-key: <OPERATOR_API_KEY>
 {
   "invite_code": "DEV2026",
   "preference_text": "想认识做 AI 产品和前端的人",
-  "recommendation_frequency": "daily",
-  "push_enabled": true,
-  "push_channels": ["feishu"]
+  "recommendation_frequency": "daily"
 }
 ```
 
@@ -141,9 +139,9 @@ x-operator-key: <OPERATOR_API_KEY>
 
 规则：
 - `recommendation_frequency` 只能是 `daily`、`manual`、`off`。
-- `push_channels` 只能从 `feishu`、`qq`、`openclaw_im`、`webhook` 中选择。
 - 如果邀请码无效、已过期、已用尽，或 Space 不可加入，直接停止并告诉用户。
 - `markdown_url` 是后续画像和推荐的主要上下文入口。
+- `push_enabled` / `push_channels` 当前后端只做接收和存储，不参与平台主流程判断。
 
 ## 第四步：读取 Space 上下文
 
@@ -372,14 +370,13 @@ Idempotency-Key: <稳定且唯一的请求键>
 
 平台负责的是：
 
-- 存储用户偏好
 - 记录推荐结果
 - 记录私信交接
 
 OpenClaw 负责的是：
 
 - 判断用户是否打开了主动推送
-- 根据 `push_enabled` 和 `push_channels` 主动把“今日推荐”或“收到对方消息”的提醒送到用户选择的渠道
+- 根据自己保存的渠道偏好，主动把“今日推荐”或“收到对方消息”的提醒送到用户选择的渠道
 
 所以如果用户说：
 
@@ -390,7 +387,7 @@ OpenClaw 负责的是：
 
 要点：
 
-- 平台只负责保存偏好、记录推荐结果和消息交接。
+- 平台只负责记录推荐结果和消息交接。
 - 具体如何把提醒送到飞书、QQ 或 OpenClaw，由 OpenClaw 自己实现。
 
 ## 联调与排查接口
