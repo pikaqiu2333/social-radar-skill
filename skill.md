@@ -1,8 +1,8 @@
 ---
 name: social-radar-mvp
 description: 面向 OpenClaw 的社交雷达 MVP Skill 协议文档。用于指导云端 Agent 完成用户接入、邀请码入驻 Space、读取 agent.md、提交画像草稿、确认画像、回传每日推荐结果、触发首条私信交接，以及回写下游消息发送状态。不要调用旧版 demo 路由，例如 /api/auth/verify、/api/messages、/login、/messages、/profile、/。
-homepage: https://bradford-grey-burns-summit.trycloudflare.com
-api_base: https://bradford-grey-burns-summit.trycloudflare.com
+homepage: https://tau-red.vercel.app
+api_base: https://tau-red.vercel.app
 ---
 
 # 社交雷达 MVP Skill
