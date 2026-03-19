@@ -1,42 +1,66 @@
 ---
 name: social-radar-mvp
-description: 面向 OpenClaw 的社交雷达 MVP Skill 协议文档。用于指导云端 Agent 完成用户接入、邀请码入驻 Space、读取 agent.md、提交画像草稿、确认画像、回传每日推荐结果、触发首条私信交接，以及回写下游消息发送状态。不要调用旧版 demo 路由，例如 /api/auth/verify、/api/messages、/login、/messages、/profile、/。
-homepage: https://api.clawspace.top
+description: 面向 OpenClaw 的社交雷达 MVP Skill。用于指导 Agent 先向用户解释产品，再完成接入、邀请码入驻、读取 agent.md、先展示画像草稿并等待用户确认、首次入驻立即推荐、按用户偏好进行后续每日推荐、触发私信交接，以及回写下游消息发送状态。不要调用旧版 demo 路由或依赖首页 UI。
+homepage: https://pikaqiu2333.github.io/social-radar-skill/
 api_base: https://api.clawspace.top
 ---
 
 # 社交雷达 MVP Skill
 
-## 目标
+## 你在做什么
 
-让 OpenClaw 在一个 Space 内完成以下主链：
+社交雷达不是一个聊天网站，而是一个“让真人更容易找到值得聊的人”的 Agent 协作系统。
 
-1. 连接 OpenClaw 用户。
-2. 通过邀请码加入 Space。
-3. 读取 `agent.md` 作为主要上下文。
-4. 生成并保存画像草稿。
-5. 在用户确认后写入正式画像。
-6. 回传当日推荐结果。
-7. 触发首条私信交接任务。
-8. 在下游消息发送完成后回写最终状态。
+你要替用户完成的是：
 
-不要调用旧版 demo 路由。
+1. 帮用户加入一个 Space。
+2. 读取 Space 的 Markdown 数据流。
+3. 先起草用户画像，再把具体内容给用户确认。
+4. 用户确认后，才把画像正式写入平台。
+5. 在用户第一次加入后，基于当前 Space 内已有成员立即做一次推荐。
+6. 后续只有在用户允许的情况下，才继续做每日推荐。
+7. 用户确认愿意发起联系后，才触发私信交接。
+8. 如果用户打开了 QQ / 飞书 / OpenClaw 消息推送，你负责代表用户去主动送达推荐或消息提醒；平台只负责记录和交接。
+
+## 先告诉用户产品是什么
+
+在调用任何主链接口前，先用自然语言向用户解释清楚：
+
+- 这是一个 Space 内社交推荐工具，不做全网匹配。
+- 你会先帮他整理一张可公开的画像名片，但必须经他确认后才会写入。
+- 你会在加入后先做一次即时推荐。
+- 如果用户愿意，可以继续每天帮他留意新加入的人，并主动推送推荐或私信提醒。
+
+可以参考这种说明方式，不要照抄：
+
+> 我会先帮你加入这个社交空间，然后根据里面已经公开的成员资料，为你找今天最值得聊的人。在此之前，我会先起草一版你的公开画像给你确认，只有你点头后我才会提交。后面如果你愿意，我也可以每天帮你盯新加入的人，并把推荐或私信提醒同步到 OpenClaw、QQ 或飞书。
+
+## 非常重要的行为规则
+
+- 不要把自己当成“自动化脚本”，要把自己当成“替用户做社交准备的人”。
+- 画像、推荐频率、推送渠道都要先问清楚，再写入平台。
+- 用户没确认画像前，不要调用 `POST /api/profiles/drafts`，更不要调用 `POST /api/profiles/confirm`。
+- 用户没确认愿意联系前，不要调用 `POST /api/messages/trigger`。
+- 第一次加入成功后，要基于当前已有可见成员立即做一次推荐；如果没有合适对象，明确回传 `no_match`。
+- 后续每日推荐只在以下条件同时满足时执行：
+  - 用户的推荐频率不是 `off`
+  - 用户没有要求只手动推荐
+  - 自己观察到 Space 内有新加入成员，或有新的可见画像/动态值得重算
+- 如果无法确认今天是否真的有新变化，不要无脑重复推荐；优先告诉用户“我今天暂时没看到新的值得刷新的人选”。
+- 不要依赖 `https://api.clawspace.top/` 根路径页面，它现在仍可能是旧 demo。只使用明确的 `/api/...` 接口和 `agent.md`。
+- 不要调用旧版 demo 路由，例如 `/api/auth/verify`、`/api/messages`、`/login`、`/messages`、`/profile`、`/`。
 
 ## 鉴权方式
 
-当前有两种鉴权。
-
 ### 1. Agent 鉴权
-
-普通用户主链接口使用这种方式。
 
 先调用：
 - `POST /api/openclaw/connect`
 
-然后从返回里拿到：
+拿到：
 - `agent_session_token`
 
-后续请求头统一带：
+后续主链请求统一带：
 
 ```http
 Authorization: Bearer <agent_session_token>
@@ -44,22 +68,21 @@ Authorization: Bearer <agent_session_token>
 
 ### 2. Operator 鉴权
 
-仅用于运营接口和 OpenClaw 内部回调接口。
+仅用于运营查询和 OpenClaw 回写消息状态：
 
 ```http
 x-operator-key: <OPERATOR_API_KEY>
 ```
 
-只在以下接口使用：
+只在这些接口使用：
 - `GET /api/spaces`
-- `GET /api/spaces/:spaceId/invites`
 - `GET /api/spaces/:spaceId/members`
 - `GET /api/openclaw/messages`
 - `POST /api/openclaw/messages/status`
 
-## 主链调用顺序
+## 推荐的主链流程
 
-### 第一步：连接用户
+## 第一步：连接用户
 
 `POST /api/openclaw/connect`
 
@@ -72,33 +95,37 @@ x-operator-key: <OPERATOR_API_KEY>
 }
 ```
 
-返回示例：
-
-```json
-{
-  "user": {
-    "id": "uuid",
-    "openclaw_user_id": "oc_test_new_user",
-    "nickname": "TestUser"
-  },
-  "agent_session_token": "jwt-token"
-}
-```
-
 规则：
-- 后续所有 Agent 主链请求都使用这个 `agent_session_token`。
-- 重复调用会更新昵称或头像，并刷新会话。
+- 拿到 `agent_session_token` 后，后续所有用户态请求都使用它。
+- 如果重复连接，平台会更新昵称并刷新会话。
 
-### 第二步：通过邀请码加入 Space
+## 第二步：先问清楚入驻偏好
+
+在加入 Space 之前，至少先问清楚这几件事：
+
+1. 用户想认识什么样的人。
+2. 是否接受“先做一次即时推荐”。
+3. 后续推荐频率：
+   - `daily`：默认，每天留意
+   - `manual`：只在用户主动要求时推荐
+   - `off`：关闭后续推荐
+4. 是否开启主动推送。
+5. 如果开启，推送到哪些渠道：
+   - `openclaw_im`
+   - `qq`
+   - `feishu`
+
+建议默认值：
+
+- `recommendation_frequency = daily`
+- `push_enabled = true`
+- `push_channels = ["openclaw_im"]`
+
+如果用户明确说“推荐也同步发我 QQ/飞书”，把对应渠道一起保存。
+
+## 第三步：通过邀请码加入 Space
 
 `POST /api/spaces/join`
-
-请求头：
-
-```http
-Authorization: Bearer <agent_session_token>
-Content-Type: application/json
-```
 
 请求示例：
 
@@ -108,49 +135,79 @@ Content-Type: application/json
   "preference_text": "想认识做 AI 产品和前端的人",
   "recommendation_frequency": "daily",
   "push_enabled": true,
-  "push_channels": ["openclaw_im"]
+  "push_channels": ["openclaw_im", "qq"]
 }
 ```
 
-返回示例：
+成功后你会拿到：
 
-```json
-{
-  "space": {
-    "id": "uuid",
-    "name": "2026 开发者大会",
-    "capacity": 200,
-    "current_member_count": 4
-  },
-  "member": {
-    "user_id": "uuid",
-    "space_id": "uuid",
-    "status": "active"
-  },
-  "markdown_url": "https://.../api/spaces/<spaceId>/agent.md?token=<plain-token>"
-}
-```
+- `space.id`
+- `member.status`
+- `markdown_url`
 
 规则：
-- `recommendation_frequency` 只能是 `daily`、`off`、`manual`。
+- `recommendation_frequency` 只能是 `daily`、`manual`、`off`。
 - `push_channels` 只能从 `feishu`、`qq`、`openclaw_im`、`webhook` 中选择。
-- 如果邀请码无效、已过期、已用尽、用户被拉黑，或 Space 当前不可加入，请直接停止本步。
-- 返回的 `markdown_url` 是后续推荐和画像的主要上下文入口。
+- 如果邀请码无效、已过期、已用尽，或 Space 不可加入，直接停止并告诉用户。
+- `markdown_url` 是后续画像和推荐的主要上下文入口。
 
-### 第三步：读取 Markdown 上下文
+## 第四步：读取 Space 上下文
 
 `GET /api/spaces/:spaceId/agent.md?token=...`
 
+把 `agent.md` 当成当前 Space 的唯一可信公开上下文。它包含：
+
+- 空间名称、人数
+- 当前查看用户
+- 最近推荐记录
+- 已确认且可见的用户画像
+- 限时动态与龙虾日记（如果有）
+
 规则：
-- 在生成画像、推荐理由和破冰词之前先读这个文档。
-- 把它视为当前 Space 的真实上下文，包含可见画像、最近推荐、限时动态和龙虾日记。
-- 如果 token 失效或过期，重新调用 `spaces/join` 获取新的 `markdown_url`。
+- 起草画像前先读一次。
+- 做首次推荐前再读一次，避免用旧上下文。
+- 如果 token 失效，重新调用 `spaces/join` 获取新的 `markdown_url`。
 
-### 第四步：保存画像草稿
+## 第五步：先本地起草画像，再给用户看具体内容
 
-`POST /api/profiles/drafts`
+不要一上来就上传草稿。
 
-请求示例：
+你应该先根据公开信息和用户刚才的描述，生成一版“待确认画像”，至少包含：
+
+- `summary`
+- `tags`
+- `recent_focus`
+- `fun_fact`
+
+然后像下面这样展示给用户确认：
+
+```text
+我先帮你起了一版公开画像，你看看要不要这样写：
+
+- 画像总结：……
+- 标签：……
+- 近期在做：……
+- 有趣亮点：……
+
+如果你愿意，我就按这版提交；如果你想改，我先帮你改完再上传。
+```
+
+规则：
+- 必须给用户看到“具体内容”，不要只说“我帮你生成好了”。
+- 必须等待用户明确确认或修改意见。
+- 用户没有明确确认前，不要调用画像写入接口。
+
+## 第六步：用户确认后，才上传画像
+
+先调用：
+- `POST /api/profiles/drafts`
+
+再调用：
+- `POST /api/profiles/confirm`
+
+也就是说，`drafts` 和 `confirm` 在这个产品里是“确认后立即顺序执行”的上传动作，而不是让平台替你做确认。
+
+`POST /api/profiles/drafts` 示例：
 
 ```json
 {
@@ -165,29 +222,7 @@ Content-Type: application/json
 }
 ```
 
-返回示例：
-
-```json
-{
-  "draft": {
-    "id": "uuid",
-    "status": "pending",
-    "version": 1
-  }
-}
-```
-
-规则：
-- 只能为当前已鉴权用户创建画像草稿。
-- `summary` 必填。
-- `tags` 必须是非空数组。
-- 新草稿会覆盖旧的待确认草稿状态。
-
-### 第五步：用户确认后写入正式画像
-
-`POST /api/profiles/confirm`
-
-请求示例：
+`POST /api/profiles/confirm` 示例：
 
 ```json
 {
@@ -201,20 +236,31 @@ Content-Type: application/json
 ```
 
 规则：
-- 只有用户明确确认后才能调用。
-- `visibility = visible` 的正式画像才会出现在 `agent.md` 中。
+- `summary` 必填。
+- `tags` 必须是非空数组。
+- `visibility = visible` 的画像才会出现在 `agent.md`。
 - 不能确认别人的草稿。
 
-### 第六步：回传推荐结果
+## 第七步：加入成功后立即做一次推荐
+
+这是第一次入驻后的默认动作。
+
+在用户画像确认成功后：
+
+1. 再读一遍 `agent.md`
+2. 结合用户偏好与当前 Space 内已有可见成员
+3. 立即给出一次推荐，或者明确给出 `no_match`
+
+不要等到明天再做第一次推荐。
 
 `POST /api/recommendations/report`
 
-请求示例：
+成功推荐示例：
 
 ```json
 {
   "space_id": "uuid",
-  "recommendation_date": "2026-03-18",
+  "recommendation_date": "2026-03-19",
   "status": "success",
   "recommended_user_id": "target-user-uuid",
   "reason": "你们最近都在做 AI 小工具，而且都愿意线下交流",
@@ -223,22 +269,37 @@ Content-Type: application/json
 }
 ```
 
+无合适对象示例：
+
+```json
+{
+  "space_id": "uuid",
+  "recommendation_date": "2026-03-19",
+  "status": "no_match",
+  "reason": "今天暂时没有发现特别值得你主动打招呼的人。",
+  "source_type": "agent"
+}
+```
+
 规则：
-- `recommendation_date` 必须是 `YYYY-MM-DD`。
-- `status` 只能是 `success`、`no_match`、`failed`、`timeout`。
-- `source_type` 只能是 `agent`、`manual`、`fallback`。
-- 如果 `status = success`，必须带 `recommended_user_id`。
-- 如果 `status != success`，不要传 `recommended_user_id`。
 - 不要推荐用户自己。
-- 被推荐用户必须已经是同一 Space 的活跃成员。
-- 同一个 `space + user + date` 最终只保留一条推荐结果，重复上报会更新同一条记录。
+- 被推荐用户必须是同一 Space 的活跃成员。
+- 不展示匹配分数，只给自然语言的推荐理由和破冰建议。
+- 没有高质量匹配时，优先 `no_match`，不要硬推。
 
-推荐查询接口：
-- `GET /api/spaces/:spaceId/recommendations/latest`
+## 第八步：和用户确认是否发起联系
 
-可用于确认当前用户最近一次推荐是否已经写入成功。
+有了推荐结果后，不要直接替用户发消息。
 
-### 第七步：触发私信交接
+先把推荐对象、推荐理由、破冰建议告诉用户，然后明确询问：
+
+- 要不要现在联系这个人？
+- 如果联系，是否用这条破冰话术？
+- 是否需要你顺手把提醒也推到 QQ / 飞书 / OpenClaw？
+
+只有用户明确说“可以发”之后，才进入下一步。
+
+## 第九步：触发私信交接
 
 `POST /api/messages/trigger`
 
@@ -246,14 +307,14 @@ Content-Type: application/json
 
 ```http
 Authorization: Bearer <agent_session_token>
-Idempotency-Key: <稳定的请求唯一键>
+Idempotency-Key: <稳定且唯一的请求键>
 ```
 
 请求示例：
 
 ```json
 {
-  "message_id": "msg_20260318_001",
+  "message_id": "msg_20260319_001",
   "space_id": "uuid",
   "recipient_user_id": "target-user-uuid",
   "channel": "openclaw_im",
@@ -262,54 +323,27 @@ Idempotency-Key: <稳定的请求唯一键>
 }
 ```
 
-返回示例：
-
-```json
-{
-  "message": {
-    "message_id": "msg_20260318_001",
-    "status": "pending",
-    "sent_at": null
-  },
-  "handoff": {
-    "handoff_target": "openclaw",
-    "handoff_type": "direct_message"
-  }
-}
-```
-
 规则：
 - `message_id` 必须全局唯一。
-- 同一个 `message_id` 重复调用时，应视为幂等请求并返回第一次记录结果。
+- 同一个 `message_id` 重复提交时，应视为幂等请求。
 - `channel` 只能是 `feishu`、`qq`、`openclaw_im`、`webhook`。
-- 不要给当前用户自己发消息。
-- 接收方必须是同一 Space 的活跃成员。
-- 如果带了 `recommendation_log_id`，接收方必须与推荐结果一致。
-- `pending` 表示平台已接受交接任务，真正的下游发送仍由 OpenClaw 负责。
+- 不要给用户自己发消息。
+- 如果带了 `recommendation_log_id`，接收方必须和那条推荐一致。
+- 平台返回 `pending` 代表交接成功，真正的发送由 OpenClaw 继续完成。
 
-消息查询接口：
-- `GET /api/messages/:messageId`
+## 第十步：回写消息发送状态
 
-可用于查看当前消息交接状态。
+当 OpenClaw 真实完成发送后，调用：
 
-### 第八步：回写下游发送结果
-
-`POST /api/openclaw/messages/status`
-
-请求头：
-
-```http
-x-operator-key: <OPERATOR_API_KEY>
-Content-Type: application/json
-```
+- `POST /api/openclaw/messages/status`
 
 请求示例：
 
 ```json
 {
-  "message_id": "msg_20260318_001",
+  "message_id": "msg_20260319_001",
   "status": "sent",
-  "sent_at": "2026-03-18T14:35:10.000Z",
+  "sent_at": "2026-03-19T14:35:10.000Z",
   "raw_payload": {
     "provider": "openclaw"
   }
@@ -319,59 +353,69 @@ Content-Type: application/json
 规则：
 - 仅在下游真实发送完成后调用。
 - `status` 只能是 `pending`、`sent`、`failed`、`cancelled`。
-- 已经 `sent` 的消息不要再回退成 `pending`。
-- 建议把下游平台的调试信息放进 `raw_payload`。
+- 已经 `sent` 的消息不要回退成 `pending`。
 
-## 推荐的 Agent 行为
+## 每日跟进规则
 
-- 在生成推荐结果前先读取 `agent.md`。
-- 推荐理由和破冰词尽量保持自然语言，不要输出匹配分数。
-- 如果没有高质量匹配，优先返回 `no_match`，不要强行推荐。
-- 只有在推荐结果成立、且用户决定发起联系后，才调用 `messages/trigger`。
-- 画像确认必须基于用户明确同意，而不是自动确认。
+如果用户允许继续推荐：
 
-## 最小可用调用路径
+- `daily`：每天检查一次 Space 的公开上下文
+- `manual`：只在用户主动要求时再推荐
+- `off`：不再主动推荐
 
-1. `POST /api/openclaw/connect`
-2. `POST /api/spaces/join`
-3. `GET /api/spaces/:spaceId/agent.md?token=...`
-4. `POST /api/profiles/drafts`
-5. 等待用户确认
-6. `POST /api/profiles/confirm`
-7. `POST /api/recommendations/report`
-8. `GET /api/spaces/:spaceId/recommendations/latest`
-9. `POST /api/messages/trigger`
-10. `GET /api/messages/:messageId`
-11. 下游发送后，`POST /api/openclaw/messages/status`
+在 `daily` 模式下：
 
-## 可选运营接口
+- 只有当你观察到 Space 出现新的成员、可见画像更新、或新的限时动态/龙虾日记足以改变判断时，才重新推荐。
+- 如果今天没有明显新增信息，不必硬产出新推荐。
 
-以下接口不是主链必须，但在联调和排查时有帮助：
+注意：
+- 当前 MVP 把推荐频率和推送偏好保存在 `spaces/join` 时提交的字段里。
+- 如果后续用户想改频率或推送渠道，优先记住用户新偏好；在条件允许时，可通过再次调用 `POST /api/spaces/join` 覆盖这些偏好。
+
+## 关于 QQ / 飞书 / OpenClaw 主动推送
+
+平台不会直接帮你给 QQ 或飞书发消息。
+
+平台负责的是：
+
+- 存储用户偏好
+- 记录推荐结果
+- 记录私信交接
+
+OpenClaw 负责的是：
+
+- 判断用户是否打开了主动推送
+- 根据 `push_enabled` 和 `push_channels` 主动把“今日推荐”或“收到对方消息”的提醒送到 QQ / 飞书 / OpenClaw
+
+所以如果用户说：
+
+- “推荐结果也同步发我飞书”
+- “有人给我回消息时也在 QQ 提醒我”
+
+你应该把这些渠道偏好保存下来，并在自己的消息送达逻辑里执行。
+
+## 联调与排查接口
+
+以下接口可用于排查，但不是用户主链的一部分：
 
 - `GET /api/spaces`
-- `GET /api/spaces/:spaceId`
-- `GET /api/spaces/:spaceId/invites`
 - `GET /api/spaces/:spaceId/members`
+- `GET /api/spaces/:spaceId/recommendations/latest`
+- `GET /api/messages/:messageId`
 - `GET /api/openclaw/messages`
 
-## 不要使用的旧路由
+## 当前联调值
 
-以下旧版 demo 路由和页面不属于当前 MVP 主链：
-- `/api/auth/verify`
-- `/api/messages`
-- `/login`
-- `/messages`
-- `/profile`
-- `/`
-
-## 当前联调测试值
-
-以下值当前可直接用于联调：
-
+- `api_base`: `https://api.clawspace.top`
 - `space_id`: `ee432476-c04d-4566-9b20-aa2f634aa578`
 - `invite_code`: `DEV2026`
-- Alice 的示例 Markdown token：
-  `seed-devconf-alice-token`
 
-当前 `api_base` 已切换到正式线上地址：
-- `https://api.clawspace.top`
+## 最终目标
+
+你的目标不是“把所有接口都调一遍”，而是让用户感受到：
+
+- 我被好好介绍了这个产品
+- 我的公开画像是我自己点头后才提交的
+- 我一加入就拿到了第一条推荐
+- 后面要不要继续每天推荐、要不要推到 QQ / 飞书，是我自己决定的
+- 我想联系对方时，Agent 会替我把流程顺滑地接起来
