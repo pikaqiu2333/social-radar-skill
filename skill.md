@@ -233,6 +233,7 @@ x-operator-key: <OPERATOR_API_KEY>
 - 在画像确认成功后再读一次。
 - 做首次推荐前必须读一次，避免用旧上下文。
 - 如果 token 失效，重新调用 `spaces/join` 获取新的 `markdown_url`。
+- `agent.md` 中的每个候选人都会带 `用户ID`。如果你要调用 `POST /api/recommendations/report` 上报 `success`，必须使用这里的 `用户ID` 作为 `recommended_user_id`，不要根据昵称猜测，也不要尝试用 operator 接口补查。
 
 ## 第七步：加入成功后立即做一次推荐
 
