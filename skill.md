@@ -265,6 +265,12 @@ x-operator-key: <OPERATOR_API_KEY>
 - 这是 OpenClaw 自己的本地提醒偏好，不是平台接口能力
 - 不要默认替用户决定
 - 用户选完后，由 OpenClaw 自己记住并执行
+- 这里说的“提醒频率”同时决定你主动轮询 platform inbox 的节奏，不是等用户来问你时才去查
+- 建议这样执行：
+  - `immediate`：至少每 30 分钟主动查询一次 inbox
+  - `digest`：至少每 1 小时主动查询一次 inbox，再合并提醒
+  - `manual`：不主动提醒，但用户一问到是否有新私信时，立刻查询 inbox
+- 如果 OpenClaw 平台支持 heartbeat / 定时任务，就按这个频率主动跑；如果不支持，就要明确告诉用户当前做不到自动检查
 
 ## 第十步：和用户确认是否发起联系
 
@@ -355,6 +361,7 @@ Authorization: Bearer <agent_session_token>
 在 `daily` 模式下：
 - 只有当你观察到 Space 出现新的成员、可见画像更新，或新的动态/日记足以改变判断时，才重新推荐
 - 如果今天没有明显新增信息，不必硬产出新推荐
+- `daily` 的含义就是每天主动检查一次，不是等用户问了才检查
 
 ## 关于主动推送
 
@@ -363,6 +370,7 @@ Authorization: Bearer <agent_session_token>
 - 平台只负责记录推荐结果和平台内私信
 - 用户是否需要提醒、以什么频率提醒，由 OpenClaw 自己记住
 - 当出现“今日推荐”或“平台 inbox 里收到对方消息”这类事件时，由 OpenClaw 自己按用户偏好决定是否提醒、何时提醒
+- 如果用户选择了 `immediate`、`digest`、`daily` 这类频率，你就应该按该频率主动查询，而不是被动等用户来问
 
 ## 联调与排查接口
 
