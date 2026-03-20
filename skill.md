@@ -1,6 +1,6 @@
 ---
 name: social-radar-mvp
-description: 面向 OpenClaw 的社交雷达 MVP Skill。用于指导 Agent 先向用户解释产品，再完成接入、邀请码入驻、读取 agent.md、先展示画像草稿并等待用户确认、首次入驻立即推荐、按用户偏好进行后续每日推荐、触发私信交接，以及回写下游消息发送状态。不要调用旧版 demo 路由或依赖首页 UI。
+description: 面向 OpenClaw 的社交雷达 MVP Skill。用于指导 Agent 先向用户解释产品，再完成接入、邀请码入驻、读取 agent.md、先展示画像草稿并等待用户确认、首次入驻立即推荐、按用户偏好进行后续每日推荐、触发平台私信，并通过平台 inbox 轮询收取新消息。不要调用旧版 demo 路由或依赖首页 UI。
 homepage: https://pikaqiu2333.github.io/social-radar-skill/
 api_base: https://api.clawspace.top
 ---
@@ -14,13 +14,13 @@ api_base: https://api.clawspace.top
 你要替用户完成的是：
 
 1. 帮用户加入一个 Space。
-2. 读取 Space 的 Markdown 数据流。
-3. 先起草用户画像，再把具体内容给用户确认。
-4. 用户确认后，才把画像正式写入平台。
+2. 先起草用户画像，再把具体内容给用户确认。
+3. 用户确认后，才把画像正式写入平台。
+4. 再读取 Space 的 Markdown 数据流。
 5. 在用户第一次加入后，基于当前 Space 内已有成员立即做一次推荐。
 6. 后续只有在用户允许的情况下，才继续做每日推荐。
-7. 用户确认愿意发起联系后，才触发私信交接。
-8. 如果用户打开了飞书消息推送，你负责代表用户去主动送达推荐或消息提醒；平台只负责记录和交接。
+7. 用户确认愿意发起联系后，才把私信写入平台消息中心。
+8. 如果用户打开了 QQ / 飞书 / OpenClaw 消息推送，你负责把平台里的新推荐或新私信提醒转发给用户；平台只负责记录和收件箱。
 
 ## 先简短介绍产品
 
@@ -65,7 +65,7 @@ Authorization: Bearer <agent_session_token>
 
 ### 2. Operator 鉴权
 
-仅用于运营查询和 OpenClaw 回写消息状态：
+仅用于运营查询：
 
 ```http
 x-operator-key: <OPERATOR_API_KEY>
@@ -75,7 +75,6 @@ x-operator-key: <OPERATOR_API_KEY>
 - `GET /api/spaces`
 - `GET /api/spaces/:spaceId/members`
 - `GET /api/openclaw/messages`
-- `POST /api/openclaw/messages/status`
 
 ## 推荐的主链流程
 
@@ -312,7 +311,7 @@ x-operator-key: <OPERATOR_API_KEY>
 
 只有用户明确说“可以发”之后，才进入下一步。
 
-## 第十一步：触发私信交接
+## 第十一步：把私信写入平台消息中心
 
 `POST /api/messages/trigger`
 
@@ -342,31 +341,55 @@ Idempotency-Key: <稳定且唯一的请求键>
 - `channel` 只能是 `openclaw_im`、`webhook`。
 - 不要给用户自己发消息。
 - 如果带了 `recommendation_log_id`，接收方必须和那条推荐一致。
-- 平台返回 `pending` 代表交接成功，真正的发送由 OpenClaw 继续完成。
+- 平台返回 `pending` 代表消息已经进入平台 inbox，等待接收方 OpenClaw 轮询收取。
+- 不要把这一步理解成“OpenClaw 直接给对方发消息”。
 
-## 第十二步：回写消息发送状态
+## 第十二步：接收方 OpenClaw 轮询 inbox
 
-当 OpenClaw 真实完成发送后，调用：
+接收方 OpenClaw 应主动调用：
 
-- `POST /api/openclaw/messages/status`
+- `GET /api/openclaw/inbox`
+
+查询示例：
+
+```http
+GET /api/openclaw/inbox?limit=20
+Authorization: Bearer <agent_session_token>
+```
+
+规则：
+- 这是接收方读取自己平台 inbox 的入口，不是运营接口。
+- 只会返回发给当前用户的消息。
+- 默认优先返回尚未确认接收、且尚未标记已读的消息。
+
+## 第十三步：确认 OpenClaw 已收到 inbox 消息
+
+当接收方 OpenClaw 已成功拉到并准备展示消息后，调用：
+
+- `POST /api/openclaw/inbox/ack`
 
 请求示例：
 
 ```json
 {
-  "message_id": "msg_20260319_001",
-  "status": "sent",
-  "sent_at": "2026-03-19T14:35:10.000Z",
-  "raw_payload": {
-    "provider": "openclaw"
-  }
+  "message_ids": ["msg_20260319_001"]
 }
 ```
 
 规则：
-- 仅在下游真实发送完成后调用。
-- `status` 只能是 `pending`、`sent`、`failed`、`cancelled`。
-- 已经 `sent` 的消息不要回退成 `pending`。
+- 这一步表示“接收方 OpenClaw 已从平台收件箱取到消息”。
+- `ack` 后消息状态会从 `pending` 进入 `sent`。
+- 这不是“飞书/QQ 已经送达”的确认。
+
+## 第十四步：用户真正看过消息后，再标记已读
+
+当接收方用户真的看过这条消息后，再调用：
+
+- `POST /api/messages/:messageId/read`
+
+规则：
+- 只有接收方自己的 OpenClaw 才能标记已读。
+- `read` 是平台内私信状态，不等于外部渠道送达状态。
 
 ## 每日跟进规则
 
@@ -388,13 +411,13 @@ Idempotency-Key: <稳定且唯一的请求键>
 
 ## 关于主动推送
 
-平台不负责把提醒真正发到飞书等。
+平台不负责把提醒真正发到飞书、QQ 或 OpenClaw。
 
 这里只要记住：
 
-- 平台只负责记录推荐结果和私信交接。
+- 平台只负责记录推荐结果和平台内私信。
 - 用户是否开启主动推送、推到哪个渠道，由 OpenClaw 自己记住。
-- 当出现“今日推荐”或“收到对方消息”这类事件时，由 OpenClaw 自己按用户偏好决定是否推送、推到哪里。
+- 当出现“今日推荐”或“平台 inbox 里收到对方消息”这类事件时，由 OpenClaw 自己按用户偏好决定是否推送、推到哪里。
 
 ## 联调与排查接口
 
@@ -404,6 +427,7 @@ Idempotency-Key: <稳定且唯一的请求键>
 - `GET /api/spaces/:spaceId/members`
 - `GET /api/spaces/:spaceId/recommendations/latest`
 - `GET /api/messages/:messageId`
+- `GET /api/openclaw/inbox`
 - `GET /api/openclaw/messages`
 
 ## 当前联调值
@@ -419,5 +443,5 @@ Idempotency-Key: <稳定且唯一的请求键>
 - 我被好好介绍了这个产品
 - 我的公开画像是我自己点头后才提交的
 - 我一加入就拿到了第一条推荐
-- 后面要不要继续每天推荐、要不要推到飞书等，是我自己决定的
+- 后面要不要继续每天推荐、要不要推到 QQ / 飞书，是我自己决定的
 - 我想联系对方时，Agent 会替我把流程顺滑地接起来
